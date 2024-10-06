@@ -13,13 +13,17 @@ Este repositorio contiene un script en JavaScript que automatiza el proceso de c
 
 3. **Permitir pegar código en la consola**  
    Para evitar restricciones, debes escribir el siguiente texto en la consola y presionar `Enter`:  
-Esto permite pegar el código en la consola sin problemas.
+   ```javascript
+   allow pasting
 
 4. **Pegar el script en la consola**  
 Copia el contenido del archivo `main.js` de este repositorio y pégalo en la consola del navegador. Luego presiona `Enter`.
 
 5. **El script hará clic automáticamente en los botones de "Cancelar solicitud"**  
 El script recorrerá todos los botones de "Cancelar solicitud" en la página y hará clic en ellos de manera automática.
+
+6. **Control del scroll**
+Debido a la forma en que Facebook carga las solicitudes de amistad, deberás hacer scroll manualmente para que el script detecte y cancele las solicitudes visibles. Si deseas eliminar todas las solicitudes, deberás seguir haciendo scroll hasta que no queden más solicitudes en la página.
 
 ## Advertencia de seguridad
 
