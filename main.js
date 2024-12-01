@@ -1,17 +1,39 @@
-// Inicializar el contador de solicitudes canceladas
-let cancelCount = 0;
+async function cancelarSolicitudesRapido() {
+    let cancelCount = 0;
+    
+    // Función para procesar las solicitudes visibles
+    async function procesarSolicitudesVisibles() {
+        const buttons = document.querySelectorAll('span');
+        const solicitudes = Array.from(buttons).filter(button => 
+            button.textContent.includes('Cancelar solicitud')
+        );
 
-// Obtener todos los botones en la página
-var buttons = document.querySelectorAll('span'); 
+        // Procesar en grupos de 5 solicitudes
+        for(let i = 0; i < solicitudes.length; i += 5) {
+            const grupo = solicitudes.slice(i, i + 5);
+            
+            // Cancelar grupo de solicitudes simultáneamente
+            grupo.forEach(button => {
+                button.click();
+                cancelCount++;
+                console.log(`Solicitud ${cancelCount} cancelada`);
+            });
 
-// Iterar sobre cada botón
-buttons.forEach(function(button) {
-    if (button.textContent.includes('Cancelar solicitud')) {
-        button.click(); // Hacer clic en el botón para cancelar la solicitud
-        cancelCount++; // Incrementar el contador
+            // Pequeña pausa entre grupos
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
     }
-});
 
-// Mostrar en consola cuántas solicitudes se han cancelado
-console.log(`Se han cancelado un total de ${cancelCount} solicitudes.`);
+    // Bucle principal con menos espera
+    const maxIntentos = 5;
+    for(let i = 0; i < maxIntentos; i++) {
+        await procesarSolicitudesVisibles();
+        window.scrollTo(0, document.body.scrollHeight);
+        await new Promise(resolve => setTimeout(resolve, 750));
+    }
 
+    console.log(`Proceso completado. Se cancelaron ${cancelCount} solicitudes.`);
+}
+
+// Ejecutar el script
+cancelarSolicitudesRapido();
