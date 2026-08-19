@@ -23,16 +23,16 @@ function crearPanelControl() {
 
     panel.innerHTML = `
         <h3 style="margin: 0 0 10px 0; font-size: 16px; color: #e4e6eb;">🤖 Eliminador Masivo</h3>
-        
+
         <div style="background: #242526; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
             <div style="font-size: 12px; color: #aaa; margin-bottom: 4px;">SOLICITUDES CANCELADAS</div>
-            <div id="fb-delete-count" style="font-size: 24px; font-weight: bold; color: #31a24c;">0</div>
+            <div id="fb-delete-count" style="font-size: 24px; font-weight: bold; color: #31a24c; transition: transform 0.15s ease;">0</div>
         </div>
 
         <div style="font-size: 13px; color: #e4e6eb; margin-bottom: 15px; line-height: 1.4;">
             ℹ️ <span style="color: #f7b928; font-weight: bold;">Sigue haciendo scroll manual</span> para cargar más. El bot eliminará las que vayan apareciendo y contará cada una solo una vez.
         </div>
-        
+
         <div id="fb-status-text" style="font-size: 12px; color: #aaa; margin-bottom: 10px;">Esperando solicitudes...</div>
 
         <button id="fb-stop-btn" style="
@@ -75,6 +75,8 @@ async function runMassDeleter() {
     let active = true;
     let cancelCount = 0;
 
+    const MAX_ATTEMPTS = 3; // reintentos antes de dar por fallida una solicitud
+
     // UI
     const ui = crearPanelControl();
     ui.onStop(() => {
@@ -97,43 +99,76 @@ async function runMassDeleter() {
         }
     }
 
+    // Encuentra los spans "hoja" con el texto buscado, descartando wrappers
+    // que envuelven a otro span que también matchea (FB anida <span><span>texto</span></span>,
+    // así que sin este filtro se clickea y cuenta el mismo botón dos veces).
+    function buscarBotonesCancelar() {
+        const candidatos = Array.from(document.querySelectorAll('span')).filter(b =>
+            b.textContent.trim() === 'Cancelar solicitud' &&
+            b.offsetParent !== null &&
+            !b.hasAttribute('data-processed') &&
+            !b.hasAttribute('data-processing')
+        );
+        return candidatos.filter(c =>
+            !candidatos.some(other => other !== c && c.contains(other))
+        );
+    }
+
     // Bucle Principal
     while (active) {
         // Cerrar errores primero
         await closePopups();
 
-        // Buscar botones visibles y NO PROCESADOS
-        // Añadimos filtro !b.hasAttribute('data-processed')
-        const buttons = Array.from(document.querySelectorAll('span')).filter(b =>
-            b.textContent.trim() === 'Cancelar solicitud' &&
-            b.offsetParent !== null &&
-            !b.hasAttribute('data-processed')
-        );
+        const buttons = buscarBotonesCancelar();
 
         if (buttons.length > 0) {
             ui.updateStatus(`Procesando ${buttons.length} visibles...`);
 
             for (const btn of buttons) {
                 if (!active) break;
+                if (!document.body.contains(btn)) continue;
 
-                // Doble chequeo por si acaso desapareció
-                if (document.body.contains(btn)) {
-                    try {
-                        // Marcar como procesado ANTES de clickear para evitar doble conteo en siguiente iteración rápida
+                const attempts = parseInt(btn.getAttribute('data-attempts') || '0', 10);
+
+                // Marcar como "en proceso" (no "procesado") hasta confirmar que de verdad se canceló
+                btn.setAttribute('data-processing', 'true');
+                btn.style.opacity = '0.5';
+
+                try {
+                    btn.click();
+                    await wait(300 + Math.random() * 300);
+                    await closePopups();
+
+                    // Verificamos que el botón realmente desapareció/dejó de estar visible
+                    // antes de contarlo. Así evitamos contar clicks que no surtieron efecto
+                    // (p.ej. si Facebook mostró un diálogo de confirmación no manejado).
+                    const seCancelo = !document.body.contains(btn) || btn.offsetParent === null;
+
+                    if (seCancelo) {
+                        btn.removeAttribute('data-processing');
                         btn.setAttribute('data-processed', 'true');
-                        btn.style.opacity = '0.5'; // Feedback visual
-
-                        btn.click();
-                        cancelCount++; // Solo incrementamos aquí una vez
+                        cancelCount++;
                         ui.updateCount(cancelCount);
-
-                        // Pausa aleatoria
-                        await wait(250 + Math.random() * 250);
-                    } catch (e) {
-                        console.error(e);
-                        // Si falla, quizás deberíamos des-marcarlo? Mejor no, para evitar bucles infinitos en errores
+                    } else if (attempts + 1 >= MAX_ATTEMPTS) {
+                        // Se agotaron los reintentos: lo damos por fallido y no lo tocamos más
+                        btn.removeAttribute('data-processing');
+                        btn.setAttribute('data-processed', 'true');
+                        btn.style.opacity = '1';
+                        console.warn('No se pudo cancelar esta solicitud tras varios intentos:', btn);
+                    } else {
+                        // Liberamos el botón para reintentar en la próxima vuelta del loop
+                        btn.removeAttribute('data-processing');
+                        btn.setAttribute('data-attempts', String(attempts + 1));
+                        btn.style.opacity = '1';
                     }
+                } catch (e) {
+                    console.error(e);
+                    btn.removeAttribute('data-processing');
+                    btn.style.opacity = '1';
                 }
+
+                // Pausa aleatoria entre solicitudes
+                await wait(250 + Math.random() * 250);
             }
             // Después del lote, cerramos posibles errores
             await closePopups();
